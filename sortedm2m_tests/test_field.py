@@ -1,17 +1,25 @@
 # -*- coding: utf-8 -*-
+import django
 from django.db import connection
 from django.db.models.fields import FieldDoesNotExist
 from django.test import TestCase
 from django.test.utils import override_settings
 from django.utils import six
 
-from sortedm2m.compat import get_field
+from sortedm2m.compat import get_field, get_rel
 
 from .models import (
-    Book, Shelf, DoItYourselfShelf, Store, MessyStore, SelfReference)
+    Book, Shelf, DoItYourselfShelf, Store, MessyStore, SelfReference, BaseBookThrough)
 
 
 str_ = six.text_type
+
+
+def m2m_set(instance, field_name, objs):
+    if django.VERSION > (1, 9):
+        getattr(instance, field_name).set(objs)
+    else:
+        setattr(instance, field_name, objs)
 
 
 class TestSortedManyToManyField(TestCase):
@@ -80,24 +88,24 @@ class TestSortedManyToManyField(TestCase):
         self.assertEqual(list(shelf.books.all()), [])
 
         books = self.books[5:2:-1]
-        shelf.books = books
+        m2m_set(shelf, "books", books)
         self.assertEqual(list(shelf.books.all()), books)
 
         books.reverse()
-        shelf.books = books
+        m2m_set(shelf, "books", books)
         self.assertEqual(list(shelf.books.all()), books)
 
         shelf.books.add(self.books[8])
         self.assertEqual(list(shelf.books.all()), books + [self.books[8]])
 
-        shelf.books = []
+        m2m_set(shelf, "books", [])
         self.assertEqual(list(shelf.books.all()), [])
 
-        shelf.books = [self.books[9]]
+        m2m_set(shelf, "books", [self.books[9]])
         self.assertEqual(list(shelf.books.all()), [
             self.books[9]])
 
-        shelf.books = []
+        m2m_set(shelf, "books", [])
         self.assertEqual(list(shelf.books.all()), [])
 
     def test_set_items_by_pk(self):
@@ -105,20 +113,20 @@ class TestSortedManyToManyField(TestCase):
         self.assertEqual(list(shelf.books.all()), [])
 
         books = self.books[5:2:-1]
-        shelf.books = [b.pk for b in books]
+        m2m_set(shelf, "books", [b.pk for b in books])
         self.assertEqual(list(shelf.books.all()), books)
 
-        shelf.books = [self.books[5].pk, self.books[2]]
+        m2m_set(shelf, "books", [self.books[5].pk, self.books[2]])
         self.assertEqual(list(shelf.books.all()), [
             self.books[5],
             self.books[2]])
 
-        shelf.books = [str_(self.books[8].pk)]
+        m2m_set(shelf, "books", [str_(self.books[8].pk)])
         self.assertEqual(list(shelf.books.all()), [self.books[8]])
 
     def test_remove_items(self):
         shelf = self.model.objects.create()
-        shelf.books = self.books[2:5]
+        m2m_set(shelf, "books", self.books[2:5])
         self.assertEqual(list(shelf.books.all()), [
             self.books[2],
             self.books[3],
@@ -134,7 +142,7 @@ class TestSortedManyToManyField(TestCase):
 
     def test_remove_items_by_pk(self):
         shelf = self.model.objects.create()
-        shelf.books = self.books[2:5]
+        m2m_set(shelf, "books", self.books[2:5])
         self.assertEqual(list(shelf.books.all()), [
             self.books[2],
             self.books[3],
@@ -176,14 +184,22 @@ class TestSortedManyToManyField(TestCase):
     def test_prefetch_related_sorting(self):
         shelf = self.model.objects.create()
         books = [self.books[0], self.books[2], self.books[1]]
-        shelf.books = books
+        m2m_set(shelf, "books", books)
 
         shelf = self.model.objects.filter(pk=shelf.pk).prefetch_related('books')[0]
         def get_ids(queryset):
             return [obj.id for obj in queryset]
         self.assertEqual(get_ids(shelf.books.all()), get_ids(books))
 
-class TestStringReference(TestSortedManyToManyField):
+    def test_base_class_str(self):
+        shelf = self.model.objects.create()
+        shelf.books.add(self.books[0])
+        through_model = shelf.books.through
+        instance = through_model.objects.all()[0]
+        self.assertEqual(str(instance), "Relationship to {0}".format(instance.book.name))
+
+
+class TestStringReference1(TestSortedManyToManyField):
     '''
     Test the same things as ``TestSortedManyToManyField`` but using a model
     that using a string to reference the relation where the m2m field should
@@ -192,7 +208,7 @@ class TestStringReference(TestSortedManyToManyField):
     model = Store
 
 
-class TestStringReference(TestSortedManyToManyField):
+class TestStringReference2(TestSortedManyToManyField):
     '''
     Test the same things as ``TestSortedManyToManyField`` but using a model
     that using a string to reference the relation where the m2m field should
@@ -205,7 +221,7 @@ class TestStringReference(TestSortedManyToManyField):
 
         self.assertEqual(len(self.model._meta.many_to_many), 1)
         sortedm2m = self.model._meta.many_to_many[0]
-        intermediate_model = sortedm2m.rel.through
+        intermediate_model = get_rel(sortedm2m).through
 
         # make sure that standard sort field is not used
         self.assertRaises(

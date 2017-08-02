@@ -1,10 +1,23 @@
 Changelog
 =========
 
-1.3.4 (in development)
+1.4.1 (in development)
 ----------------------
 
-*No changes yet*
+1.4.0
+-----
+
+* `#104`_: Add compatiblity for Django 1.10 and 1.11!
+  Thank you Frankie Dintino for the patch.
+* `#94`_: Add french translation files. Mainly for strings in the admin.
+  Thanks to ppython for the patch.
+* `#93`_: Prevent users from accidentally importing and using
+  ``ManyToManyField`` instead of ``SortedManyToManyField`` from ``sortedm2m``.
+  Thanks Dayne May for the patch.
+
+.. _#104: https://github.com/gregmuellegger/django-sortedm2m/pull/104
+.. _#94: https://github.com/gregmuellegger/django-sortedm2m/pull/94
+.. _#93: https://github.com/gregmuellegger/django-sortedm2m/pull/93
 
 1.3.3
 -----
